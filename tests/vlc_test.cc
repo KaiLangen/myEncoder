@@ -59,6 +59,14 @@ namespace testing
 					58, 59, 52, 45, 38, 31, 39, 46, 
 					53, 60, 61, 54, 47, 55, 62, 63
         };
+
+        const char symbol_table[6] =
+        {0x09, 0x08, 0x05, 0x35, 0x22, 0x53};
+
+        const int amp_table[6] =
+        {168, -97, -12, -10, -1, -3};
+
+        const char SIGN_MASK = 0x80;
     };
 
     TEST_F(VlcTest, test_quant)
@@ -91,15 +99,51 @@ namespace testing
         int A[8][8]; 
         double D[8][8];
         int level[64]; 
-        char runlen[100];
+        char runlen[400];
+        int amp, nbytes;
+        char sign, symbol;
+        int i = 0;
+        int count = 0;
+
         memcpy(D, C, sizeof(double) * 64);
         DCT2(D);
         QUANT_intra(A, D, 1.5);
         zigzag_scan_8x8(level, A); 
         runlength(runlen, level);
 
-        for(int i = 0; i < 64; ++i)
-            ASSERT_EQ(level[i], Expected[i]);
+        while(runlen[i] != '\0')
+        {
+            symbol = runlen[i];
+            if(symbol == 0x0f){
+                ++count;
+                ++i;
+                continue;
+            }
+
+            if(symbol == 0x00){
+                break;
+            }
+
+            nbytes = ceil((int)(symbol & 0x0f) / 8.0);
+            ASSERT_EQ(symbol, symbol_table[count]);
+            ++i;
+
+            // extract the amplitude
+            amp = 0;
+            for(int j = 0; j < nbytes; ++j)
+                ((unsigned char *)&amp)[j] = runlen[i+j];
+            i+=nbytes;
+
+            sign = ((unsigned char *)&amp)[nbytes - 1] & SIGN_MASK;
+            for(int j = nbytes; j < 4; ++j)
+                if(sign)
+                    ((unsigned char *)&amp)[j] = 0xff;
+                else
+                    ((unsigned char *)&amp)[j] = 0x00;
+            ASSERT_EQ(amp, amp_table[count]);
+            ++count;
+        }
+
     }
 
 }

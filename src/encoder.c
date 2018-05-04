@@ -18,9 +18,9 @@ int main(int argc, char** argv){
         {56, 57, 58, 59, 60, 61, 62, 63}
     };
     int level[64];
-    int amp;
     char symbol;
     char runlen[400];
+    int amp;
     int nbytes;
     char SIGN_MASK = 0x80;
     char sign;

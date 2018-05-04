@@ -1,6 +1,5 @@
 #include <math.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 
 #include "encoder.h"
@@ -73,7 +72,6 @@ void runlength(char rl[400], const int level[64])
             ++zeros;
         else if((level[i] == 0) && (zeros == 15)){
             symbol |= 0xf << 4;
-            printf("symbol: (%d,%d)\n", (int)(symbol >> 4), (int)(symbol & 0x0f));
             rl[idx] = symbol;
             symbol = 0x00;
             zeros = 0;
@@ -90,10 +88,6 @@ void runlength(char rl[400], const int level[64])
             nbits = floor(log2(abs((double)level[i]))) + 2;
             nbytes = ceil(nbits / 8.0);
             symbol |= (nbits & 0xf);
-            printf("symbol: (%d,%d)(%d)\n",
-                   (int)(symbol >> 4),
-                   (int)(symbol & 0x0f),
-                   amp);
             rl[idx] = symbol;
             symbol = 0x00;
             ++idx;

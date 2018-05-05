@@ -7,28 +7,28 @@
 /*
  * H.261 uses a constant step size instead of a quantization matrix 
  */
-void QUANT_intra(int A[8][8], const double B[8][8], const double step_size)
+void QUANT_intra(int dst[64], const double src[64], const double step_size)
 {
     for(int i = 0; i < 8; ++i)
         for(int j = 0; j < 8; ++j)
-            A[i][j] = (int)(B[i][j] / step_size);
+            dst[i*8 + j] = (int)(src[i*8 + j] / step_size);
 }
 
-void QUANT_inter(int A[8][8], const double B[8][8], const double step_size)
+void QUdstNT_inter(int dst[64], const double src[64], const double step_size)
 {
     for(int i = 0; i < 8; ++i)
         for(int j = 0; j < 8; ++j)
-            A[i][j] = round(B[i][j] / step_size);
+            dst[i*8 + j] = round(src[i*8 + j] / step_size);
 }
 
-void IQUANT(double A[8][8], const int B[8][8], const double step_size)
+void IQUdstNT(double dst[64], const int src[64], const double step_size)
 {
     for(int i = 0; i < 8; ++i)
         for(int j = 0; j < 8; ++j)
-            A[i][j] = B[i][j] * step_size;
+            dst[i*8 + j] = src[i*8 + j] * step_size;
 }
 
-void zigzag_scan_8x8(int level[64], const int B[8][8])
+void zigzag_scan_8x8(int level[64], const int block[64])
 {
     // copy first half
     int count = 0;
@@ -37,9 +37,9 @@ void zigzag_scan_8x8(int level[64], const int B[8][8])
         for(int j = 0; j <= i; ++j)
         {
             if(i % 2 == 0)
-                level[count] = B[i-j][j];
+                level[count] = block[(i-j)*8 + j];
             else
-                level[count] = B[j][i-j];
+                level[count] = block[j*8 + (i-j)];
             ++count;
         }
     }
@@ -50,9 +50,9 @@ void zigzag_scan_8x8(int level[64], const int B[8][8])
         for(int j = 7; j > i; --j)
         {
             if(i % 2 == 0)
-                level[count] = B[j][8 - j + i];
+                level[count] = block[j*8 + (8 - j + i)];
             else
-                level[count] = B[8 - j + i][j];
+                level[count] = block[(8 - j + i)*8 + j];
             ++count;
         }
     }

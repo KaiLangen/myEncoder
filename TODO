@@ -1,0 +1,6 @@
+1) Create tests for MacroBlock and Three-Step_Search files
+2) Finish Motion Compensation / Motion Estimation module
+3) Implement DPCM (DC component redundancy)
+4) Implement Entropy coding component
+5) Handle JPEG input
+6) Ensure that output conforms with MPEG1/2 video format

@@ -1,4 +1,4 @@
-#include <stdlib.h>
+#include <cstdlib>
 #include <string>
 
 #include <gmock/gmock.h>

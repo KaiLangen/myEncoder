@@ -19,4 +19,11 @@ add_executable( vlcTest vlc_test.cc )
 target_link_libraries( vlcTest utils ${PThreadLib} ${GTEST_BOTH_LIBRARIES} )
 add_test( vlcTest vlcTest )
 
-add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} DEPENDS vlcTest dctTest)
+add_executable( ioTest io_test.cc )
+target_link_libraries( ioTest utils ${PThreadLib} ${GTEST_BOTH_LIBRARIES} )
+add_test( ioTest ioTest )
+
+add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} DEPENDS
+                  vlcTest
+                  dctTest
+                  ioTest)

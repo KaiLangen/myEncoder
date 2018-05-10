@@ -7,17 +7,23 @@
  * and height are multiples of 8.
  * */
 void blockify(char blocks[][64], const char* frame,
-              const int  height, const int width){
-    int mb_width = width / 8;
-    int mb_height = height / 8;
-    for(int i = 0; i < mb_height; ++i)
-    {
-        for(int j = 0; j < mb_width; ++j)
-        {
+              int mb_high, int mb_wide)
+{
+    for(int i = 0; i < mb_high; ++i)
+        for(int j = 0; j < mb_wide; ++j)
             for(int k = 0; k < 8; ++k)
-                memcpy(&blocks[i*mb_width + j][k*8], frame, 8);
-        }
-    }
+                memcpy(&blocks[i*mb_wide + j][k*8],
+                       frame[(i*8 + k)*mb_wide + j*8], 8);
+}
+
+void unblockify(char* frame, const char blocks[][64],
+                int mb_high, int width)
+{
+    for(int i = 0; i < mb_high; ++i)
+        for(int j = 0; j < mb_wide; ++j)
+            for(int k = 0; k < 8; ++k)
+                memcpy(frame[(i*8 + k)*mb_wide + j*8],
+                       &blocks[i*mb_wide + j][k*8], 8);
 }
 
 void doublify(double dest[64], const char src[64]){

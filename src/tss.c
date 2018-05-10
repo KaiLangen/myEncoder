@@ -1,12 +1,12 @@
 #include <stdlib.h>
 #include <math.h>
 
-double mad(double target[64], double ref[64])
+short mad(short target[64], short ref[64])
 {
-    double sum = 0;
+    short sum = 0;
     for (int i = 0; i < 64; ++i)
         sum += abs(src[i] - target[i]);
-    sum /= 64.0;
+    sum /= 64;
     return sum;
 }
 
@@ -25,12 +25,12 @@ int find_min(int costs[9])
     return location;
 }
 
-int TSS(double t_blocks[][64], double ref_block[64],
+int TSS(short t_blocks[][64], short ref_block[64],
         int step, int center, int mb_high, int mb_wide)
 {
     // search start location
     int costs[9] =
-    {65537., 65537., 65537., 65537., 65537., 65537., 65537., 65537., 65537.};
+    {65537, 65537, 65537, 65537, 65537, 65537, 65537, 65537, 65537};
     int locations[9];
     int loc, og, cx, cy, x, y;
     // calculate the first center
@@ -51,7 +51,7 @@ int TSS(double t_blocks[][64], double ref_block[64],
                 if(x < 0 || x > mb_wide || y < 0 || y > mb_high ||
                   (i == 1 && j == 1))
                 {
-                    costs[i*3 + j] = 65537.;
+                    costs[i*3 + j] = 65537;
                     continue;
                 }
 
@@ -72,7 +72,7 @@ int TSS(double t_blocks[][64], double ref_block[64],
     return center;
 }
 
-void TSS_ALL(int vectors[][2], double target[][64], double ref[][64],
+void TSS_ALL(int vectors[][2], short target[][64], short ref[][64],
              int param, int mb_high, int mb_wide)
 {
     int res, oldx, oldy, newx, newy;

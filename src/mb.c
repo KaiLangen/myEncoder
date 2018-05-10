@@ -26,7 +26,7 @@ void unblockify(char* frame, const char blocks[][64],
                        &blocks[i*mb_wide + j][k*8], 8);
 }
 
-void doublify(double dest[64], const char src[64]){
+void shortify(short dest[64], const char src[64]){
     for(int i = 0; i < 64; ++i)
-        dest[i] = ((int)src[i] / 255.0);
+        dest[i] = src[i];
 }

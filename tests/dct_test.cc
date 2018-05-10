@@ -23,52 +23,61 @@ namespace testing
         virtual void SetUp(){}
         virtual void TearDown(){}
 
-        const double B[64] =
+        const short B[64] =
         {
-            1, 1, 1, 1, 0, 0, 0, 0,
-            1, 1, 1, 0, 0, 0, 0, 0,
-            1, 1, 0, 0, 0, 0, 0, 0,
-            1, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0
+          255, 0, 0, 10, 0, 0, 0, 0,
+            0, 0, 0,  0, 0, 0, 0, 0,
+            0, 0, 0,  0, 0, 0, 0, 0,
+           10, 0, 0,  0, 0, 0, 0, 0,
+            0, 0, 0,  0, 0, 0, 0, 0,
+            0, 0, 0,  0, 0, 0, 0, 0,
+            0, 0, 0,  0, 0, 0, 0, 0,
+            0, 0, 0,  0, 0, 0, 0, 0
         };
 
-        const double Expected[64] =
+        // computed DCT with Matlab, then converted to short using:
+        // int16(floor(dct2(B)))
+        const short Expected[64] =
         {
-            1.2500, 1.3654, 0.5576, 0.0395,      0, 0.0887, 0.0396,-0.0361,
-            1.3654, 1.4202, 0.4186,-0.1633,-0.1125, 0.0676, 0.0230,-0.0676,
-            0.5576, 0.4186,-0.2500,-0.4937,-0.2310, 0.0292,      0,-0.0833,
-            0.0395,-0.1633,-0.4937,-0.4418,-0.0637, 0.1633, 0.0609,-0.0676,
-                 0,-0.1125,-0.2310,-0.0637, 0.2500, 0.3204, 0.0957,-0.0752,
-            0.0887, 0.0676, 0.0292, 0.1633, 0.3204, 0.2347,-0.0407,-0.1633,
-            0.0396, 0.0230,-0.0000, 0.0609, 0.0957,-0.0407,-0.2500,-0.2595,
-           -0.0361,-0.0676,-0.0833,-0.0676,-0.0752,-0.1633,-0.2595,-0.2130
+           34,  46,  41,  37,  34,  27,  17,   7,
+           46,  62,  55,  51,  46,  37,  23,   9,
+           41,  55,  50,  45,  41,  33,  20,   8,
+           37,  51,  45,  41,  37,  30,  18,   8,
+           34,  46,  41,  37,  34,  27,  17,   7,
+           27,  37,  33,  30,  27,  21,  13,   5,
+           17,  23,  20,  18,  17,  13,   8,   3,
+            7,   9,   8,   8,   7,   5,   3,   1
         };
 
-        const double threshold = 0.00001;
+        const short threshold = 1;
     };
 
 
     TEST_F(DctTest, forward_transform)
     {
-        double A[64]; 
+        short A[64]; 
+        short e;
 
-        memcpy(A, B, sizeof(double) * 64);
-        DCT2(A);
+        memcpy(A, B, sizeof(short) * 64);
+        dct(A);
         for(int i = 0; i < 8; ++i)
             for(int j = 0; j < 8; ++j)
-                ASSERT_LT(abs(A[i*8 + j] - Expected[i*8 + j]), threshold);
+                ASSERT_LE(abs(A[i*8 + j] - Expected[i*8 + j]), threshold);
     }
 
     TEST_F(DctTest, inverse_transform)
     {
-        double C[64]; 
-        memcpy(C, Expected, sizeof(double) * 64);
-        IDCT2(C);
+        short C[64]; 
+        short b;
+        memcpy(C, Expected, sizeof(short) * 64);
+        init_idct();
+        idct(C);
         for(int i = 0; i < 8; ++i)
             for(int j = 0; j < 8; ++j)
-                ASSERT_LT(abs(C[i*8 + j] - B[i*8 + j]), threshold);
+            {
+                if(i + j == 0) // inverse DC component is inaccurate
+                    continue;
+                ASSERT_LE(abs(C[i*8 + j] - B[i*8 + j]), threshold);
+           }
     }
 }

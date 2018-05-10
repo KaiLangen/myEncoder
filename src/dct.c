@@ -1,183 +1,260 @@
-/* 
- * Fast discrete cosine transform algorithms (C)
- * 
- * Copyright (c) 2017 Project Nayuki. (MIT License)
- * https://www.nayuki.io/page/fast-discrete-cosine-transform-algorithms
- * https://www.nayuki.io/res/fast-discrete-cosine-transform-algorithms/fast-dct-8.c
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy of
- * this software and associated documentation files (the "Software"), to deal in
- * the Software without restriction, including without limitation the rights to
- * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
- * the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
- * - The above copyright notice and this permission notice shall be included in
- *   all copies or substantial portions of the Software.
- * - The Software is provided "as is", without warranty of any kind, express or
- *   implied, including but not limited to the warranties of merchantability,
- *   fitness for a particular purpose and noninfringement. In no event shall the
- *   authors or copyright holders be liable for any claim, damages or other
- *   liability, whether in an action of contract, tort or otherwise, arising from,
- *   out of or in connection with the Software or the use or other dealings in the
- *   Software.
- */
-
-#include <math.h>
-#include <string.h>
 #include "encoder.h"
 
+/**********************************************************/
+/* inverse two dimensional DCT, Chen-Wang algorithm       */
+/* (cf. IEEE ASSP-32, pp. 803-816, Aug. 1984)             */
+/* 32-bit integer arithmetic (8 bit coefficients)         */
+/* 11 mults, 29 adds per DCT                              */
+/*                                      sE, 18.8.91       */
+/**********************************************************/
+/* coefficients extended to 12 bit for IEEE1180-1990      */
+/* compliance                           sE,  2.1.94       */
+/**********************************************************/
 
-static const double S[] = {
-    0.353553390593273762200422,
-    0.254897789552079584470970,
-    0.270598050073098492199862,
-    0.300672443467522640271861,
-    0.353553390593273762200422,
-    0.449988111568207852319255,
-    0.653281482438188263928322,
-    1.281457723870753089398043,
-};
+/* this code assumes >> to be a two's-complement arithmetic */
+/* right shift: (-2)>>1 == -1 , (-3)>>1 == -2               */
 
-static const double A[] = {
-    NAN,
-    0.707106781186547524400844,
-    0.541196100146196984399723,
-    0.707106781186547524400844,
-    1.306562964876376527856643,
-    0.382683432365089771728460,
-};
+#define W1 2841 /* 2048*sqrt(2)*cos(1*pi/16) */
+#define W2 2676 /* 2048*sqrt(2)*cos(2*pi/16) */
+#define W3 2408 /* 2048*sqrt(2)*cos(3*pi/16) */
+#define W5 1609 /* 2048*sqrt(2)*cos(5*pi/16) */
+#define W6 1108 /* 2048*sqrt(2)*cos(6*pi/16) */
+#define W7 565  /* 2048*sqrt(2)*cos(7*pi/16) */
 
+/* private data */
+static short iclip[1024]; /* clipping table */
+static short *iclp;
 
-// DCT type II, scaled. Algorithm by Arai, Agui, Nakajima, 1988.
-// See: https://web.stanford.edu/class/ee398a/handouts/lectures/07-TransformCoding.pdf#page=30
-void FastDct8_transform(double vector[8]) {
-    const double v0 = vector[0] + vector[7];
-    const double v1 = vector[1] + vector[6];
-    const double v2 = vector[2] + vector[5];
-    const double v3 = vector[3] + vector[4];
-    const double v4 = vector[3] - vector[4];
-    const double v5 = vector[2] - vector[5];
-    const double v6 = vector[1] - vector[6];
-    const double v7 = vector[0] - vector[7];
-    
-    const double v8 = v0 + v3;
-    const double v9 = v1 + v2;
-    const double v10 = v1 - v2;
-    const double v11 = v0 - v3;
-    const double v12 = -v4 - v5;
-    const double v13 = (v5 + v6) * A[3];
-    const double v14 = v6 + v7;
-    
-    const double v15 = v8 + v9;
-    const double v16 = v8 - v9;
-    const double v17 = (v10 + v11) * A[1];
-    const double v18 = (v12 + v14) * A[5];
-    
-    const double v19 = -v12 * A[2] - v18;
-    const double v20 = v14 * A[4] - v18;
-    
-    const double v21 = v17 + v11;
-    const double v22 = v11 - v17;
-    const double v23 = v13 + v7;
-    const double v24 = v7 - v13;
-    
-    const double v25 = v19 + v24;
-    const double v26 = v23 + v20;
-    const double v27 = v23 - v20;
-    const double v28 = v24 - v19;
-    
-    vector[0] = S[0] * v15;
-    vector[1] = S[1] * v26;
-    vector[2] = S[2] * v21;
-    vector[3] = S[3] * v28;
-    vector[4] = S[4] * v16;
-    vector[5] = S[5] * v25;
-    vector[6] = S[6] * v22;
-    vector[7] = S[7] * v27;
-}
+/* private prototypes */
+static void idctrow (short *blk);
+static void idctcol (short *blk);
+//static int init_idct (void);
 
-void DCT2(double block[64])
+/* use a helping global variable to do initialization automatically */
+//static const int g_bInit = init_idct();
+
+/* row (horizontal) IDCT
+ *
+ *           7                       pi         1
+ * dst[k] = sum c[l] * src[l] * cos( -- * ( k + - ) * l )
+ *          l=0                      8          2
+ *
+ * where: c[0]    = 128
+ *        c[1..7] = 128*sqrt(2)
+ */
+
+static void idctrow(short *blk)
 {
-    double temp1[64];
-    memcpy(temp1, block, sizeof(double) * 64);
+	int x0, x1, x2, x3, x4, x5, x6, x7, x8;
 
-    // row-wise DCT
-    for (int i = 0; i < 8; ++i)
-        FastDct8_transform(&temp1[i*8]);
+	/* shortcut */
+	if (!((x1 = blk[4]<<11) | (x2 = blk[6]) | (x3 = blk[2]) |
+		    (x4 = blk[1]) | (x5 = blk[7]) | (x6 = blk[5]) | (x7 = blk[3])))
+	{
+		blk[0]=blk[1]=blk[2]=blk[3]=blk[4]=blk[5]=blk[6]=blk[7]=blk[0]<<3;
+		return;
+	}
 
-    // transpose
-    for (int i = 0; i < 8; ++i)
-        for (int j = 0; j < 8; ++j)
-            block[j*8 + i] = temp1[i*8 + j];
+	x0 = (blk[0]<<11) + 128; /* for proper rounding in the fourth stage */
 
-    // column-wise DCT
-    for (int i = 0; i < 8; ++i)
-        FastDct8_transform(&block[i*8]);
+	/* first stage */
+	x8 = W7*(x4+x5);
+	x4 = x8 + (W1-W7)*x4;
+	x5 = x8 - (W1+W7)*x5;
+	x8 = W3*(x6+x7);
+	x6 = x8 - (W3-W5)*x6;
+	x7 = x8 - (W3+W5)*x7;
+	
+	/* second stage */
+	x8 = x0 + x1;
+	x0 -= x1;
+	x1 = W6*(x3+x2);
+	x2 = x1 - (W2+W6)*x2;
+	x3 = x1 + (W2-W6)*x3;
+	x1 = x4 + x6;
+	x4 -= x6;
+	x6 = x5 + x7;
+	x5 -= x7;
+	
+	/* third stage */
+	x7 = x8 + x3;
+	x8 -= x3;
+	x3 = x0 + x2;
+	x0 -= x2;
+	x2 = (181*(x4+x5)+128)>>8;
+	x4 = (181*(x4-x5)+128)>>8;
+	
+	/* fourth stage */
+	blk[0] = (x7+x1)>>8;
+	blk[1] = (x3+x2)>>8;
+	blk[2] = (x0+x4)>>8;
+	blk[3] = (x8+x6)>>8;
+	blk[4] = (x8-x6)>>8;
+	blk[5] = (x0-x4)>>8;
+	blk[6] = (x3-x2)>>8;
+	blk[7] = (x7-x1)>>8;
 }
 
-// DCT type III, scaled. A straightforward inverse of the forward algorithm.
-void FastDct8_inverseTransform(double vector[8]) {
-    const double v15 = vector[0] / S[0];
-    const double v26 = vector[1] / S[1];
-    const double v21 = vector[2] / S[2];
-    const double v28 = vector[3] / S[3];
-    const double v16 = vector[4] / S[4];
-    const double v25 = vector[5] / S[5];
-    const double v22 = vector[6] / S[6];
-    const double v27 = vector[7] / S[7];
-    
-    const double v19 = (v25 - v28) / 2;
-    const double v20 = (v26 - v27) / 2;
-    const double v23 = (v26 + v27) / 2;
-    const double v24 = (v25 + v28) / 2;
-    
-    const double v7  = (v23 + v24) / 2;
-    const double v11 = (v21 + v22) / 2;
-    const double v13 = (v23 - v24) / 2;
-    const double v17 = (v21 - v22) / 2;
-    
-    const double v8 = (v15 + v16) / 2;
-    const double v9 = (v15 - v16) / 2;
-    
-    const double v18 = (v19 - v20) * A[5];  // Different from original
-    const double v12 = (v19 * A[4] - v18) / (A[2] * A[5] - A[2] * A[4] - A[4] * A[5]);
-    const double v14 = (v18 - v20 * A[2]) / (A[2] * A[5] - A[2] * A[4] - A[4] * A[5]);
-    
-    const double v6 = v14 - v7;
-    const double v5 = v13 / A[3] - v6;
-    const double v4 = -v5 - v12;
-    const double v10 = v17 / A[1] - v11;
-    
-    const double v0 = (v8 + v11) / 2;
-    const double v1 = (v9 + v10) / 2;
-    const double v2 = (v9 - v10) / 2;
-    const double v3 = (v8 - v11) / 2;
-    
-    vector[0] = (v0 + v7) / 2;
-    vector[1] = (v1 + v6) / 2;
-    vector[2] = (v2 + v5) / 2;
-    vector[3] = (v3 + v4) / 2;
-    vector[4] = (v3 - v4) / 2;
-    vector[5] = (v2 - v5) / 2;
-    vector[6] = (v1 - v6) / 2;
-    vector[7] = (v0 - v7) / 2;
-}
-
-void IDCT2(double block[64])
+/* column (vertical) IDCT
+ *
+ *             7                         pi         1
+ * dst[8*k] = sum c[l] * src[8*l] * cos( -- * ( k + - ) * l )
+ *            l=0                        8          2
+ *
+ * where: c[0]    = 1/1024
+ *        c[1..7] = (1/1024)*sqrt(2)
+ */
+static void idctcol(short *blk)
 {
-    double temp1[64];
-    memcpy(temp1, block, sizeof(double) * 64);
+	int x0, x1, x2, x3, x4, x5, x6, x7, x8;
 
-    // row-wise IDCT
-    for (int i = 0; i < 8; ++i)
-        FastDct8_inverseTransform(&temp1[i*8]);
+	/* shortcut */
+	if (!((x1 = (blk[8*4]<<8)) | (x2 = blk[8*6]) | (x3 = blk[8*2]) |
+		    (x4 = blk[8*1]) | (x5 = blk[8*7]) | (x6 = blk[8*5]) | (x7 = blk[8*3])))
+	{
+		blk[8*0]=blk[8*1]=blk[8*2]=blk[8*3]=blk[8*4]=blk[8*5]=blk[8*6]=blk[8*7]=
+		  iclp[(blk[8*0]+32)>>6];
+		return;
+	}
 
-    // Transpose
-    for (int i = 0; i < 8; ++i)
-        for (int j = 0; j < 8; ++j)
-            block[j*8 + i] = temp1[i*8 + j];
+	x0 = (blk[8*0]<<8) + 8192;
 
-    // "column-wise" IDCT
-    for (int i = 0; i < 8; ++i)
-        FastDct8_inverseTransform(&block[i*8]);
+	/* first stage */
+	x8 = W7*(x4+x5) + 4;
+	x4 = (x8+(W1-W7)*x4)>>3;
+	x5 = (x8-(W1+W7)*x5)>>3;
+	x8 = W3*(x6+x7) + 4;
+	x6 = (x8-(W3-W5)*x6)>>3;
+	x7 = (x8-(W3+W5)*x7)>>3;
+	
+	/* second stage */
+	x8 = x0 + x1;
+	x0 -= x1;
+	x1 = W6*(x3+x2) + 4;
+	x2 = (x1-(W2+W6)*x2)>>3;
+	x3 = (x1+(W2-W6)*x3)>>3;
+	x1 = x4 + x6;
+	x4 -= x6;
+	x6 = x5 + x7;
+	x5 -= x7;
+	
+	/* third stage */
+	x7 = x8 + x3;
+	x8 -= x3;
+	x3 = x0 + x2;
+	x0 -= x2;
+	x2 = (181*(x4+x5)+128)>>8;
+	x4 = (181*(x4-x5)+128)>>8;
+	
+	/* fourth stage */
+	blk[8*0] = iclp[(x7+x1)>>14];
+	blk[8*1] = iclp[(x3+x2)>>14];
+	blk[8*2] = iclp[(x0+x4)>>14];
+	blk[8*3] = iclp[(x8+x6)>>14];
+	blk[8*4] = iclp[(x8-x6)>>14];
+	blk[8*5] = iclp[(x0-x4)>>14];
+	blk[8*6] = iclp[(x3-x2)>>14];
+	blk[8*7] = iclp[(x7-x1)>>14];
+}
+
+/* two dimensional inverse discrete cosine transform */
+void idct(short block[64])
+{
+	int i;
+
+	for (i=0; i<8; i++)
+		idctrow(block+8*i);
+
+	for (i=0; i<8; i++)
+		idctcol(block+i);
+}
+
+int init_idct()
+{
+	int i;
+
+	iclp = iclip+512;
+	for (i= -512; i<512; i++)
+		iclp[i] = (i<-256) ? -256 : ((i>255) ? 255 : i);
+
+	return 0;
+}
+
+void dct(short block[64])
+{
+	int        j1, i, j, k;
+	float	b[8];
+	float        b1[8];
+	float        d[8][8];
+	float f0=(float).7071068;
+	float f1=(float).4903926;
+	float f2=(float).4619398;
+	float f3=(float).4157348;
+	float f4=(float).3535534;
+	float f5=(float).2777851;
+	float f6=(float).1913417;
+	float f7=(float).0975452;
+
+	for (i = 0, k = 0; i < 8; i++, k += 8) {
+		for (j = 0; j < 8; j++) {
+		  b[j] = (float)block[k+j];
+		}
+		/* Horizontal transform */
+		for (j = 0; j < 4; j++) {
+		  j1 = 7 - j;
+		  b1[j] = b[j] + b[j1];
+		  b1[j1] = b[j] - b[j1];
+		}
+		b[0] = b1[0] + b1[3];
+		b[1] = b1[1] + b1[2];
+		b[2] = b1[1] - b1[2];
+		b[3] = b1[0] - b1[3];
+		b[4] = b1[4];
+		b[5] = (b1[6] - b1[5]) * f0;
+		b[6] = (b1[6] + b1[5]) * f0;
+		b[7] = b1[7];
+		d[i][0] = (b[0] + b[1]) * f4;
+		d[i][4] = (b[0] - b[1]) * f4;
+		d[i][2] = b[2] * f6 + b[3] * f2;
+		d[i][6] = b[3] * f6 - b[2] * f2;
+		b1[4] = b[4] + b[5];
+		b1[7] = b[7] + b[6];
+		b1[5] = b[4] - b[5];
+		b1[6] = b[7] - b[6];
+		d[i][1] = b1[4] * f7 + b1[7] * f1;
+		d[i][5] = b1[5] * f3 + b1[6] * f5;
+		d[i][7] = b1[7] * f7 - b1[4] * f1;
+		d[i][3] = b1[6] * f3 - b1[5] * f5;
+	}
+	/* Vertical transform */
+	for (i = 0; i < 8; i++) {
+		for (j = 0; j < 4; j++) {
+		  j1 = 7 - j;
+		  b1[j] = d[j][i] + d[j1][i];
+		  b1[j1] = d[j][i] - d[j1][i];
+		}
+		b[0] = b1[0] + b1[3];
+		b[1] = b1[1] + b1[2];
+		b[2] = b1[1] - b1[2];
+		b[3] = b1[0] - b1[3];
+		b[4] = b1[4];
+		b[5] = (b1[6] - b1[5]) * f0;
+		b[6] = (b1[6] + b1[5]) * f0;
+		b[7] = b1[7];
+		d[0][i] = (b[0] + b[1]) * f4;
+		d[4][i] = (b[0] - b[1]) * f4;
+		d[2][i] = b[2] * f6 + b[3] * f2;
+		d[6][i] = b[3] * f6 - b[2] * f2;
+		b1[4] = b[4] + b[5];
+		b1[7] = b[7] + b[6];
+		b1[5] = b[4] - b[5];
+		b1[6] = b[7] - b[6];
+		d[1][i] = b1[4] * f7 + b1[7] * f1;
+		d[5][i] = b1[5] * f3 + b1[6] * f5;
+		d[7][i] = b1[7] * f7 - b1[4] * f1;
+		d[3][i] = b1[6] * f3 - b1[5] * f5;
+	}
+	for (i = 0; i < 8; i++)
+		for (j = 0; j < 8; j++)
+		  block[i << 3 | j] = (short)(d[i][j]);
 }

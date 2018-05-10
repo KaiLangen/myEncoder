@@ -24,7 +24,7 @@ namespace testing
         virtual void SetUp(){}
         virtual void TearDown(){}
 
-        const int B[64] =
+        const short B[64] =
         {
              0,  1,  2,  3,  4,  5,  6,  7,
              8,  9, 10, 11, 12, 13, 14, 15,
@@ -36,19 +36,7 @@ namespace testing
             56, 57, 58, 59, 60, 61, 62, 63
         };
 
-        double C[64] =
-        {
-             0,  1,  2,  3,  4,  5,  6,  7,
-             8,  9, 10, 11, 12, 13, 14, 15,
-            16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 26, 27, 28, 29, 30, 31,
-            32, 33, 34, 35, 36, 37, 38, 39,
-            40, 41, 42, 43, 44, 45, 46, 47,
-            48, 49, 50, 51, 52, 53, 54, 55,
-            56, 57, 58, 59, 60, 61, 62, 63
-        };
-
-        const int Expected[64] =
+        const short Expected[64] =
         {
            0,  1,  8, 16,  9,  2,  3, 10, 
           17, 24, 32, 25, 18, 11,  4,  5, 
@@ -60,23 +48,21 @@ namespace testing
 					53, 60, 61, 54, 47, 55, 62, 63
         };
 
-        const char symbol_table[6] =
-        {0x09, 0x08, 0x05, 0x35, 0x22, 0x53};
+        const unsigned char symbol_table[5] =
+        {0x08, 0x05, 0x08, 0x64, 0xA3};
 
-        const int amp_table[6] =
-        {168, -97, -12, -10, -1, -3};
+        const int amp_table[5] =
+        {126, -9, -72, -7, -2};
 
-        const char SIGN_MASK = 0x80;
+        const unsigned char SIGN_MASK = 0x80;
     };
 
     TEST_F(VlcTest, test_quant)
     {
-        int A[64]; 
-        for(int i = 0; i < 8; ++i)
-            for(int j = 0; j < 8; ++j)
-                C[i*8 + j] = (double)B[i*8 + j];
+        short A[64]; 
+        memcpy(A, B, sizeof(short) * 64);
 
-        QUANT_intra(A, C, 32.0); 
+        QUANT(A, 32); 
         for(int i = 0; i < 4; ++i)
             for(int j = 0; j < 8; ++j)
                 ASSERT_EQ(A[i*8 + j], 0);
@@ -88,33 +74,25 @@ namespace testing
 
     TEST_F(VlcTest, test_zigzag8)
     {
-        int level[64]; 
+        short level[64]; 
         zigzag_scan_8x8(level, B); 
-        for(int i = 0; i < 8; ++i)
-        {
-            for(int j = 0; j < 8; ++j)
-                printf("%d ", level[i*8 + j]);
-            printf("\n");
-        }
-
         for(int i = 0; i < 64; ++i)
             ASSERT_EQ(level[i], Expected[i]);
     }
 
     TEST_F(VlcTest, test_rle)
     {
-        int A[64]; 
-        double D[64];
-        int level[64]; 
-        char runlen[400];
+        short A[64]; 
+        short level[64]; 
+        unsigned char runlen[400];
         int amp, nbytes;
-        char sign, symbol;
+        unsigned char sign, symbol;
         int i = 0;
         int count = 0;
 
-        memcpy(D, C, sizeof(double) * 64);
-        DCT2(D);
-        QUANT_intra(A, D, 1.5);
+        memcpy(A, B, sizeof(short) * 64);
+        dct(A);
+        QUANT(A, 2);
         zigzag_scan_8x8(level, A); 
         runlength(runlen, level);
 
@@ -132,6 +110,9 @@ namespace testing
             }
 
             nbytes = ceil((int)(symbol & 0x0f) / 8.0);
+            printf("symbol: (%d,%d)",
+                   (int)(symbol >> 4),
+                   (int)(symbol & 0x0f));
             ASSERT_EQ(symbol, symbol_table[count]);
             ++i;
 
@@ -141,12 +122,14 @@ namespace testing
                 ((unsigned char *)&amp)[j] = runlen[i+j];
             i+=nbytes;
 
+            // add the sign of the amp to the integer
             sign = ((unsigned char *)&amp)[nbytes - 1] & SIGN_MASK;
             for(int j = nbytes; j < 4; ++j)
                 if(sign)
                     ((unsigned char *)&amp)[j] = 0xff;
                 else
                     ((unsigned char *)&amp)[j] = 0x00;
+            printf("(%d)\n", amp);
             ASSERT_EQ(amp, amp_table[count]);
             ++count;
         }

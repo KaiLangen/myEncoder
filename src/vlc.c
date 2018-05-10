@@ -7,28 +7,21 @@
 /*
  * H.261 uses a constant step size instead of a quantization matrix 
  */
-void QUANT_intra(int dst[64], const double src[64], const double step_size)
+void QUANT(short blk[64], const short step_size)
 {
     for(int i = 0; i < 8; ++i)
         for(int j = 0; j < 8; ++j)
-            dst[i*8 + j] = (int)(src[i*8 + j] / step_size);
+            blk[i*8 + j] /= step_size;
 }
 
-void QUdstNT_inter(int dst[64], const double src[64], const double step_size)
+void IQUANT(short blk[64], const short step_size)
 {
     for(int i = 0; i < 8; ++i)
         for(int j = 0; j < 8; ++j)
-            dst[i*8 + j] = round(src[i*8 + j] / step_size);
+            blk[i*8 + j] *= step_size;
 }
 
-void IQUdstNT(double dst[64], const int src[64], const double step_size)
-{
-    for(int i = 0; i < 8; ++i)
-        for(int j = 0; j < 8; ++j)
-            dst[i*8 + j] = src[i*8 + j] * step_size;
-}
-
-void zigzag_scan_8x8(int level[64], const int block[64])
+void zigzag_scan_8x8(short level[64], const short block[64])
 {
     // copy first half
     int count = 0;
@@ -58,13 +51,13 @@ void zigzag_scan_8x8(int level[64], const int block[64])
     }
 }
 
-void runlength(char rl[400], const int level[64])
+void runlength(unsigned char rl[400], const short level[64])
 {
     int nbytes;
     int nbits;
     int zeros = 0;
     int idx = 0;
-    char symbol = 0x00;
+    unsigned char symbol = 0x00;
     int amp;
 
     for(int i = 0; i < 64; ++i){
@@ -75,6 +68,7 @@ void runlength(char rl[400], const int level[64])
             rl[idx] = symbol;
             symbol = 0x00;
             zeros = 0;
+            ++idx;
         }
         else
         {
@@ -89,6 +83,9 @@ void runlength(char rl[400], const int level[64])
             nbytes = ceil(nbits / 8.0);
             symbol |= (nbits & 0xf);
             rl[idx] = symbol;
+            printf("symbol: (%d,%d)",
+               (int)(symbol >> 4),
+               (int)(symbol & 0x0f));
             symbol = 0x00;
             ++idx;
 
@@ -96,13 +93,15 @@ void runlength(char rl[400], const int level[64])
             for (int j = 0; j < nbytes; ++j)
                 rl[idx+j] = ((unsigned char *)&amp)[j]; 
             idx += nbytes;
+            printf("(%d)\n", amp);
         }
     }
 
     // coalesce zeroes at the end
-    while(rl[idx] == 0xf0)
+    do
+    {
         --idx;
+    } while(rl[idx] == 0xf0);
 
-    rl[idx] = 0x00;
-    rl[idx+1] = '\0';
+    rl[idx+1] = 0x00;
 }

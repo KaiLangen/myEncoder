@@ -21,11 +21,22 @@
 
 #define BUFF_SIZE 100
 
-// Enums
+// Enums, global constants, structs,...
 enum Sqtype {QCIF, CIF};
 
 enum interlace {IP, IT, IB, IM};
 
 extern const double framerate[];
+
+struct pblock_t
+{
+    short* Y1;
+    short* Y2;
+    short* Y3;
+    short* Y4;
+    short* U;
+    short* V;
+};
+
 
 #endif

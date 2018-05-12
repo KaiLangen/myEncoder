@@ -3,7 +3,6 @@
 #include <string.h>
 
 #include "encoder.h"
-#include "defs.h"
 
 const char* frname[] = 
 {
@@ -79,7 +78,7 @@ int readHeader(FILE *fp, int* width, int* height, int* fr, int* inl, int* ar)
     return 0;
 }
 
-int readFrame(FILE *fp, char* buffer, int sqtype)
+int readFrame(FILE *fp, unsigned char* buffer, int sqtype)
 {
     const char frame[] = "FRAME\n";
     fgets(buffer, BUFF_SIZE, fp);
@@ -110,7 +109,7 @@ int readFrame(FILE *fp, char* buffer, int sqtype)
     return 0;
 }
 
-int imwrite(FILE *fp, char* buffer, int sqtype)
+int imwrite(FILE *fp, unsigned char* buffer, int sqtype)
 {
     if(sqtype == QCIF)
     {
@@ -130,4 +129,13 @@ int imwrite(FILE *fp, char* buffer, int sqtype)
         return -1;
     }
     return 0;
+}
+
+int skipFrame(FILE *fp, int n)
+{
+    int res = 0;
+    // Frame header size = 6
+    for (int i = 0; i < n; ++i)
+        res |= fseek(fp, QCIF_SIZE+6, SEEK_CUR);
+    return res;
 }

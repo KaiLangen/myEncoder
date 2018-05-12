@@ -1,19 +1,29 @@
 #include <stdlib.h>
 #include <math.h>
+#include <limits.h>
 
-short mad(short target[64], short ref[64])
+#include "encoder.h"
+
+static short mad(struct pblock_t trg, struct pblock_t ref)
 {
     short sum = 0;
     for (int i = 0; i < 64; ++i)
-        sum += abs(src[i] - target[i]);
-    sum /= 64;
+    {
+        sum += abs(ref.Y1[i] - trg.Y1[i]);
+        sum += abs(ref.Y2[i] - trg.Y2[i]);
+        sum += abs(ref.Y3[i] - trg.Y3[i]);
+        sum += abs(ref.Y4[i] - trg.Y4[i]);
+        sum += abs(ref.U[i] - trg.U[i]);
+        sum += abs(ref.V[i] - trg.V[i]);
+    }
+    sum /= (64*6);
     return sum;
 }
 
-int find_min(int costs[9])
+static int find_min(unsigned short costs[9])
 {
-    int minimum = costs[0];
-    location = 0;
+    unsigned short minimum = costs[0];
+    int location = 0;
     for(int c = 1; c < 9; ++c)
     {
         if(costs[c] < minimum)
@@ -25,38 +35,47 @@ int find_min(int costs[9])
     return location;
 }
 
-int TSS(short t_blocks[][64], short ref_block[64],
-        int step, int center, int mb_high, int mb_wide)
+static int TSS(struct pblock_t trg[], struct pblock_t ref,
+        int step, int center, int pb_high, int pb_wide)
 {
     // search start location
-    int costs[9] =
-    {65537, 65537, 65537, 65537, 65537, 65537, 65537, 65537, 65537};
-    int locations[9];
+    unsigned short costs[9] = {USHRT_MAX, USHRT_MAX, USHRT_MAX, USHRT_MAX,
+                   USHRT_MAX, USHRT_MAX, USHRT_MAX, USHRT_MAX, USHRT_MAX};
+    int locations[9] = {-1, -1, -1, -1, -1, -1, -1, -1, -1};
     int loc, og, cx, cy, x, y;
     // calculate the first center
     // avoid recalculating the center within the loop
-    costs[4] = mad(t_blocks[center], ref_block);
+    costs[4] = mad(trg[center], ref);
     locations[4] = center;
 
     while(step >= 1)
     {
-        cy = center / mb_wide;
-        cx = center % mb_wide;
+        // center pb coordinates in the image = (cy, cx)
+        cy = center / pb_wide;
+        cx = center % pb_wide;
+        // coordinates in the cost matrix = (i,j)
         for(int i = 0; i < 3; ++i)
         {
             for(int j = 0; j < 3; ++j)
             {
+                // the 9 pts formed by stepping away from the center = (y, x)
+                //
+                // (cy-step, cx-step), (cy-step,      cx), (cy-step, cx+step)
+                // (cy     , cx-step), (cy     ,      cx), (cy     , cx+step)
+                // (cy+step, cx-step), (cy+step,      cx), (cy+step, cx+step)
                 y = cy + (i-1) * step;
                 x = cx + (j-1) * step;
-                if(x < 0 || x > mb_wide || y < 0 || y > mb_high ||
+
+                // check if the pt coordinates fall outside of the image
+                if(x < 0 || x >= pb_wide || y < 0 || y >= pb_high ||
                   (i == 1 && j == 1))
                 {
-                    costs[i*3 + j] = 65537;
+//                    costs[i*3 + j] = USHRT_MAX;
                     continue;
                 }
 
-                costs[i*3 + j] = mad(t_blocks[y*mb_wide + x], ref_block);
-                locations[i*3 + j] = y*mb_wide + x;
+                costs[i*3 + j] = mad(trg[y*pb_wide + x], ref);
+                locations[i*3 + j] = y*pb_wide + x;
             }
         }
 
@@ -72,8 +91,8 @@ int TSS(short t_blocks[][64], short ref_block[64],
     return center;
 }
 
-void TSS_ALL(int vectors[][2], short target[][64], short ref[][64],
-             int param, int mb_high, int mb_wide)
+void TSS_ALL(int vectors[][2], struct pblock_t target[],
+             struct pblock_t ref[], int param, int pb_high, int pb_wide)
 {
     int res, oldx, oldy, newx, newy;
 
@@ -82,15 +101,14 @@ void TSS_ALL(int vectors[][2], short target[][64], short ref[][64],
     double stepMax = pow(2.0, (L-1.0));
     int step = (int)stepMax;
 
-    for(int i = 0; i < mb_high * mb_wide; ++i)
+    for(int i = 0; i < pb_high * pb_wide; ++i)
     {
-        res = TSS(target, ref[i], i, mb_high, mb_wide);
-        oldy = i / mb_wide;
-        oldx = i % mb_wide;
-        newy = res / mb_wide;
-        newx = res % mb_wide;
+        res = TSS(target, ref[i], step, i, pb_high, pb_wide);
+        oldy = i / pb_wide;
+        oldx = i % pb_wide;
+        newy = res / pb_wide;
+        newx = res % pb_wide;
         vectors[i][0] = newy - oldy;
         vectors[i][1] = newx - oldx;
     }
 }
-

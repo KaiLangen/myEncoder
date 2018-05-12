@@ -1,6 +1,21 @@
 1) Create tests for MacroBlock and Three-Step_Search files
+   -still todo. but now have img io so this may be easier
+
 2) Finish Motion Compensation / Motion Estimation module
+   -more or less complete???
+
 3) Implement DPCM (DC component redundancy)
+   -still todo.
+
 4) Implement Entropy coding component
+   -still todo.
+
 5) Handle JPEG input
+   -putting off for now. Focusing instead on the videos in .y4m format. Easier to handle,
+    and allow us to move forward on other components.
+   -.y4m format is "planar" as opposed to "packed", meaning that the YUV channels are not
+    interleaved. How to create macroblocks and prediction blocks from this???
+
 6) Ensure that output conforms with MPEG1/2 video format
+   -still todo. Header format demonstrated in https://en.wikipedia.org/wiki/Macroblock
+   -probably better to start by emulating the H.261 standard and adding from there

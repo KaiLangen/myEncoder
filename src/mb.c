@@ -12,39 +12,39 @@
 void blockify(short blocks[][64], const unsigned char* frame,
               int height, int width)
 {
-    /* calculate the number of mb's fill the image */
-    int mb_high = height / 8;
-    int mb_wide = width / 8;
+    /* calculate the number of transform block's fill the image */
+    int tb_high = height / 8;
+    int tb_wide = width / 8;
 
-    // copy every 8x8 pixel block into a mb
-    for(int i = 0; i < mb_high; ++i)
-        for(int j = 0; j < mb_wide; ++j)
+    // copy every 8x8 pixel block into a transform block
+    for(int i = 0; i < tb_high; ++i)
+        for(int j = 0; j < tb_wide; ++j)
             for(int m = 0; m < 8; ++m)
                 for (int n = 0; n < 8; ++n)
-                    blocks[i*mb_wide + j][m*8 + n] =
+                    blocks[i*tb_wide + j][m*8 + n] =
                         frame[(i*8 + m)*width + j*8 + n];
 }
 
 void unblockify(unsigned char* frame, const short blocks[][64],
                 int height, int width)
 {
-    /* calculate the number of mb's fill the image */
-    int mb_high = height / 8;
-    int mb_wide = width / 8;
+    /* calculate the number of tb's fill the image */
+    int tb_high = height / 8;
+    int tb_wide = width / 8;
 
-    // copy every MB value back into the frame
-    for(int i = 0; i < mb_high; ++i)
-        for(int j = 0; j < mb_wide; ++j)
+    // copy every TB value back into the frame
+    for(int i = 0; i < tb_high; ++i)
+        for(int j = 0; j < tb_wide; ++j)
             for(int m = 0; m < 8; ++m)
                 for (int n = 0; n < 8; ++n)
                     frame[(i*8 + m)*width + j*8 + n] =
-                        (unsigned char)blocks[i*mb_wide + j][m*8 + n];
+                        (unsigned char)blocks[i*tb_wide + j][m*8 + n];
 }
 
 
-int mb2pb(struct pblock_t pblks[], short blocks[][64], int sqtype)
+int tb2pb(struct pblock_t pblks[], short blocks[][64], int sqtype)
 {
-    int luma_w, luma_h, pb_wide, pb_high, mb_wide, mb_high;
+    int luma_w, luma_h, pb_wide, pb_high, tb_wide, tb_high;
     short (*chromU)[64], (*chromV)[64];
     if (sqtype == CIF)
     {
@@ -64,10 +64,10 @@ int mb2pb(struct pblock_t pblks[], short blocks[][64], int sqtype)
     }
     pb_high = luma_h / 16;
     pb_wide = luma_w / 16;
-    mb_high = luma_h / 8;
-    mb_wide = luma_w / 8;
+    tb_high = luma_h / 8;
+    tb_wide = luma_w / 8;
 
-    chromU = blocks + mb_high * mb_wide;
+    chromU = blocks + tb_high * tb_wide;
     chromV = chromU + pb_high * pb_wide;
 
     for(int i = 0; i < pb_high; ++i)
@@ -77,10 +77,10 @@ int mb2pb(struct pblock_t pblks[], short blocks[][64], int sqtype)
            // group four Y blocks together to form a prediction block
            // Y1  Y2
            // Y3  Y4
-           pblks[i*pb_wide + j].Y1 = blocks[i*2*mb_wide + j*2];
-           pblks[i*pb_wide + j].Y2 = blocks[i*2*mb_wide + j*2+1];
-           pblks[i*pb_wide + j].Y3 = blocks[(i*2+1)*mb_wide + j*2];
-           pblks[i*pb_wide + j].Y4 = blocks[(i*2+1)*mb_wide + j*2+1];
+           pblks[i*pb_wide + j].Y1 = blocks[i*2*tb_wide + j*2];
+           pblks[i*pb_wide + j].Y2 = blocks[i*2*tb_wide + j*2+1];
+           pblks[i*pb_wide + j].Y3 = blocks[(i*2+1)*tb_wide + j*2];
+           pblks[i*pb_wide + j].Y4 = blocks[(i*2+1)*tb_wide + j*2+1];
 
            // 1 cr/u chrom block
            pblks[i*pb_wide + j].U = chromU[i*pb_wide + j];
@@ -91,9 +91,9 @@ int mb2pb(struct pblock_t pblks[], short blocks[][64], int sqtype)
     }
 }
 
-int pb2mb(short blocks[][64], struct pblock_t pblks[], int sqtype)
+int pb2tb(short blocks[][64], struct pblock_t pblks[], int sqtype)
 {
-    int luma_w, luma_h, pb_wide, pb_high, mb_wide, mb_high;
+    int luma_w, luma_h, pb_wide, pb_high, tb_wide, tb_high;
     short (*chromU)[64], (*chromV)[64];
     if (sqtype == CIF)
     {
@@ -113,10 +113,10 @@ int pb2mb(short blocks[][64], struct pblock_t pblks[], int sqtype)
     }
     pb_high = luma_h / 16;
     pb_wide = luma_w / 16;
-    mb_high = luma_h / 8;
-    mb_wide = luma_w / 8;
+    tb_high = luma_h / 8;
+    tb_wide = luma_w / 8;
 
-    chromU = blocks + mb_high * mb_wide;
+    chromU = blocks + tb_high * tb_wide;
     chromV = chromU + pb_high * pb_wide;
 
     for(int i = 0; i < pb_high; ++i)
@@ -126,13 +126,13 @@ int pb2mb(short blocks[][64], struct pblock_t pblks[], int sqtype)
            // copy four Y blocks from prediction block
            // Y1  Y2
            // Y3  Y4
-           memcpy(blocks[i*2*mb_wide + j*2],
+           memcpy(blocks[i*2*tb_wide + j*2],
                   pblks[i*pb_wide + j].Y1, sizeof(short)*64);
-           memcpy(blocks[i*2*mb_wide + j*2+1],
+           memcpy(blocks[i*2*tb_wide + j*2+1],
                   pblks[i*pb_wide + j].Y2, sizeof(short)*64);
-           memcpy(blocks[(i*2+1)*mb_wide + j*2],
+           memcpy(blocks[(i*2+1)*tb_wide + j*2],
                   pblks[i*pb_wide + j].Y3, sizeof(short)*64);
-           memcpy(blocks[(i*2+1)*mb_wide + j*2+1],
+           memcpy(blocks[(i*2+1)*tb_wide + j*2+1],
                   pblks[i*pb_wide + j].Y4, sizeof(short)*64);
 
            // 1 cr/u chrom block

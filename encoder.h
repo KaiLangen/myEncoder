@@ -42,6 +42,6 @@ void blockify(short blocks[][64], const unsigned char* frame,
               int height, int width);
 void unblockify(unsigned char* frame, const short blocks[][64], 
                 int height, int width);
-int mb2pb(struct pblock_t pblks[], short blocks[][64], int sqtype);
-int pb2mb(short blocks[][64], struct pblock_t pblks[], int sqtype);
+int tb2pb(struct pblock_t pblks[], short blocks[][64], int sqtype);
+int pb2tb(short blocks[][64], struct pblock_t pblks[], int sqtype);
 #endif

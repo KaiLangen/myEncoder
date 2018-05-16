@@ -4,19 +4,33 @@
 
 #include "encoder.h"
 
-static short mad(struct pblock_t trg, struct pblock_t ref)
+static short mad(pxl ref[], pxl trg[], int refStart,
+                 int trgStart, int height, int width)
 {
+    int offset, offU, offV;
     short sum = 0;
-    for (int i = 0; i < 64; ++i)
+    /* Sum up the Y blocks */
+    for (int i = 0; i < 16; ++i)
     {
-        sum += abs(ref.Y1[i] - trg.Y1[i]);
-        sum += abs(ref.Y2[i] - trg.Y2[i]);
-        sum += abs(ref.Y3[i] - trg.Y3[i]);
-        sum += abs(ref.Y4[i] - trg.Y4[i]);
-        sum += abs(ref.U[i] - trg.U[i]);
-        sum += abs(ref.V[i] - trg.V[i]);
+        for (int j = 0; j < 16; ++j)
+        {
+            offset = i*width + j;
+            sum += abs(ref[refStart + offset] - trg[trgStart + offset]);
+        }
     }
-    sum /= (64*6);
+
+    offset = (width*height);
+    for (int i = 0; i < 8; ++i)
+    {
+        for (int j = 0; j < 8; ++j)
+        {
+            offU = offset + i*width/2 + j;
+            offV = offU + width*height/4;
+            sum += abs(ref[refStart/4 + offU] - trg[trgStart/4 + offU]);
+            sum += abs(ref[refStart/4 + offV] - trg[trgStart/4 + offV]);
+        }
+    }
+
     return sum;
 }
 
@@ -35,8 +49,8 @@ static int find_min(unsigned short costs[9])
     return location;
 }
 
-static int TSS(struct pblock_t trg[], struct pblock_t ref,
-        int step, int center, int pb_high, int pb_wide)
+static int TSS(pxl ref[], pxl trg[],
+        int step, int center, int height, int width)
 {
     // search start location
     unsigned short costs[9] = {USHRT_MAX, USHRT_MAX, USHRT_MAX, USHRT_MAX,
@@ -45,14 +59,14 @@ static int TSS(struct pblock_t trg[], struct pblock_t ref,
     int loc, og, cx, cy, x, y;
     // calculate the first center
     // avoid recalculating the center within the loop
-    costs[4] = mad(trg[center], ref);
+    costs[4] = mad(ref, trg, center, center, height, width);
     locations[4] = center;
 
     while(step >= 1)
     {
         // center pb coordinates in the image = (cy, cx)
-        cy = center / pb_wide;
-        cx = center % pb_wide;
+        cy = center / width;
+        cx = center % width;
         // coordinates in the cost matrix = (i,j)
         for(int i = 0; i < 3; ++i)
         {
@@ -67,15 +81,14 @@ static int TSS(struct pblock_t trg[], struct pblock_t ref,
                 x = cx + (j-1) * step;
 
                 // check if the pt coordinates fall outside of the image
-                if(x < 0 || x >= pb_wide || y < 0 || y >= pb_high ||
+                if(x < 0 || (x+16) > width || y < 0 || (y+16) > height ||
                   (i == 1 && j == 1))
                 {
 //                    costs[i*3 + j] = USHRT_MAX;
                     continue;
                 }
-
-                costs[i*3 + j] = mad(trg[y*pb_wide + x], ref);
-                locations[i*3 + j] = y*pb_wide + x;
+                locations[i*3+j] = y*width + x;
+                costs[i*3+j] = mad(ref, trg, center, y*width+x, height, width);
             }
         }
 
@@ -91,24 +104,26 @@ static int TSS(struct pblock_t trg[], struct pblock_t ref,
     return center;
 }
 
-void TSS_ALL(int vectors[][2], struct pblock_t target[],
-             struct pblock_t ref[], int param, int pb_high, int pb_wide)
+void TSS_ALL(int vectors[][2], pxl ref[], pxl trg[],
+             int param, int height, int width)
 {
-    int res, oldx, oldy, newx, newy;
+    int res, newx, newy, idx;
 
     // take log2 of param to find the number of steps required
     double L = floor(log2(param + 1.0));
     double stepMax = pow(2.0, (L-1.0));
     int step = (int)stepMax;
 
-    for(int i = 0; i < pb_high * pb_wide; ++i)
+    for(int i = 0; i < height; i += 16)
     {
-        res = TSS(target, ref[i], step, i, pb_high, pb_wide);
-        oldy = i / pb_wide;
-        oldx = i % pb_wide;
-        newy = res / pb_wide;
-        newx = res % pb_wide;
-        vectors[i][0] = newy - oldy;
-        vectors[i][1] = newx - oldx;
+        for(int j = 0; j < width; j += 16)
+        {
+            res = TSS(ref, trg, step, i*width+j, height, width);
+            idx = (i*width/16 + j)/16;
+            newy = res / width;
+            newx = res % width;
+            vectors[idx][0] = newy - i;
+            vectors[idx][1] = newx - j;
+        }
     }
 }

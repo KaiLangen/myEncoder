@@ -1,32 +1,83 @@
 #include "encoder.h"
 
-void create_pred_image(struct pblock_t pred_blks[], struct pblock_t trg[],
-                       int vectors[][2], int pb_high, int pb_wide)
+void motion_compensation(pxl ref[], pxl trg[], int vectors[][2], 
+                         int height, int width)
 {
-    int ref_block;
-    for(int i = 0; i < pb_high * pb_wide; ++i)
+    int offset, offU, offV, motion, mbStart;
+    int pb_high = height / 16;
+    int pb_wide = width / 16;
+    for (int i = 0; i < pb_high; ++i)
     {
-        // offset the reference block by the motion vector
-        ref_block = i + vectors[i][0] * pb_wide + vectors[i][1];
+        for (int j = 0; j < pb_wide; ++j)
+        {
+            mbStart = i*pb_wide + j;
+            motion = vectors[mbStart][0] * width + vectors[mbStart][1];
+            // luma components
+            for (int m = 0; m < 16; ++m)
+            {
+                for (int n = 0; n < 16; ++n)
+                {
+                    // offset = MB start + row offset + col offset
+                    offset = (i*16 + m)*width + j*16 + n;
+                    ref[offset] -= trg[offset + motion];
+                }
+            }
 
-        // copy the MB addresses in from target block into prediction block
-        pred_blks[i] = trg[ref_block];
+            // chroma components
+            offset = (width*height);
+            motion = vectors[mbStart][0] * width / 4 + vectors[mbStart][1] / 2;
+            for (int m = 0; m < 8; ++m)
+            {
+                for (int n = 0; n < 8; ++n)
+                {
+                    // offset = MB start + row offset + col offset
+                    offU = offset + (i*8+m)*width/2 + (j*8) + n;
+                    offV = offU + width*height/4;
+                    ref[offU] -= trg[offU + motion];
+                    ref[offV] -= trg[offV + motion];
+                }
+            }
+        }
     }
 }
 
-void motion_compensation(struct pblock_t ref[], struct pblock_t pred_blocks[],
-                         int pb_high, int pb_wide)
+
+void create_pred_image(pxl pred[], pxl trg[], int vectors[][2], 
+                       int height, int width)
 {
-    for (int i = 0; i < pb_high * pb_wide; ++i)
+    int offset, offU, offV, motion, mbStart;
+    int pb_high = height / 16;
+    int pb_wide = width / 16;
+    for (int i = 0; i < pb_high; ++i)
     {
-        for (int j = 0; j < 64; ++j)
+        for (int j = 0; j < pb_wide; ++j)
         {
-            ref[i].Y1[j] -= pred_blocks[i].Y1[j];
-            ref[i].Y2[j] -= pred_blocks[i].Y2[j];
-            ref[i].Y3[j] -= pred_blocks[i].Y3[j];
-            ref[i].Y4[j] -= pred_blocks[i].Y4[j];
-            ref[i].U[j] -= pred_blocks[i].U[j];
-            ref[i].V[j] -= pred_blocks[i].V[j];
+            mbStart = i*pb_wide + j;
+            motion = vectors[mbStart][0] * width + vectors[mbStart][1];
+            for (int m = 0; m < 16; ++m)
+            {
+                for (int n = 0; n < 16; ++n)
+                {
+                    // offset = MB start + row offset + col offset
+                    offset = (i*16 + m)*width + j*16 + n;
+                    pred[offset] = trg[offset + motion];
+                }
+            }
+            
+            // chroma components
+            offset = (width*height);
+            motion = vectors[mbStart][0] * width / 4 + vectors[mbStart][1] / 2;
+            for (int m = 0; m < 8; ++m)
+            {
+                for (int n = 0; n < 8; ++n)
+                {
+                    // offset = MB start + row offset + col offset
+                    offU = offset + (i*8+m)*width/2 + (j*8) + n;
+                    offV = offU + width*height/4;
+                    pred[offU] = trg[offU + motion];
+                    pred[offV] = trg[offV + motion];
+                }
+            }
         }
     }
 }
